@@ -1,4 +1,4 @@
-HEAD
+
 // app/_layout.js
 import React from 'react';
 import { StatusBar, View } from 'react-native';
