@@ -2,9 +2,9 @@
 import React from 'react';
 import { ScrollView, View, Text, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useAppContext } from '../context/AppContext';
 import GlassCard from '../components/GlassCard';
 import SectionTitle from '../components/SectionTitle';
-import { useApp, useThemeColors } from '../context/AppContext';
 
 function calcOverall(subjects) {
   let a = 0;
@@ -19,29 +19,27 @@ function calcOverall(subjects) {
 function getAttendanceInsights(subjects) {
   if (!subjects.length) return null;
   const sorted = [...subjects].sort(
-    (x, y) => x.attended / (x.total || 1) - y.attended / (y.total || 1)
+    (a, b) => a.attended / (a.total || 1) - b.attended / (b.total || 1)
   );
   const lowest = sorted[0];
-  const pct =
-    lowest.total === 0
-      ? 0
-      : Math.round((lowest.attended / lowest.total) * 100);
-  return { lowest, pct };
+  const curPct =
+    lowest.total === 0 ? 0 : Math.round((lowest.attended / lowest.total) * 100);
+  return { lowest, curPct };
 }
 
 export default function HomeScreen() {
-  const { state, toggleTheme, setPart } = useApp();
-  const { colors, theme } = useThemeColors();
-  const overall = calcOverall(state.subjects);
-  const insights = getAttendanceInsights(state.subjects);
-  const pendingTasks = state.tasks.filter((t) => !t.done).length;
+  const { appState, colors, toggleTheme } = useAppContext();
+  const overall = calcOverall(appState.subjects);
+  const insights = getAttendanceInsights(appState.subjects);
+  const pendingCount = appState.tasks.filter((t) => !t.done).length;
+
+  const mainSubject = insights?.lowest?.name || 'your core subject';
 
   return (
     <ScrollView
       style={{ flex: 1 }}
-      contentContainerStyle={{ padding: 16, paddingBottom: 90, gap: 16 }}
+      contentContainerStyle={{ padding: 16, paddingBottom: 96, gap: 18 }}
     >
-      {/* Top Greeting + Theme Toggle */}
       <GlassCard colors={colors}>
         <View
           style={{
@@ -50,11 +48,11 @@ export default function HomeScreen() {
             alignItems: 'center',
           }}
         >
-          <View style={{ flex: 1 }}>
+          <View style={{ flex: 1, paddingRight: 12 }}>
             <Text
               style={{
                 color: colors.textMuted,
-                fontSize: 13,
+                fontSize: 12,
                 letterSpacing: 3,
               }}
             >
@@ -63,12 +61,12 @@ export default function HomeScreen() {
             <Text
               style={{
                 color: colors.text,
-                fontSize: 26,
+                fontSize: 24,
                 fontWeight: '800',
                 marginTop: 6,
               }}
             >
-              Hi, {state.profile.name}
+              Hi, {appState.profile.name}
             </Text>
             <Text
               style={{
@@ -77,7 +75,8 @@ export default function HomeScreen() {
                 marginTop: 4,
               }}
             >
-              One place for attendance, tasks, focus, CGPA & timetable.
+              Everything for your semester – attendance, tasks, CGPA & timetable
+              in one neon dashboard.
             </Text>
           </View>
 
@@ -94,12 +93,18 @@ export default function HomeScreen() {
             }}
           >
             <Ionicons
-              name={theme === 'dark' ? 'moon' : 'sunny'}
+              name={appState.theme === 'dark' ? 'moon' : 'sunny'}
               size={18}
               color={colors.neonCyan}
             />
-            <Text style={{ color: colors.text, fontSize: 13 }}>
-              {theme === 'dark' ? 'Dark' : 'Light'}
+            <Text
+              style={{
+                color: colors.text,
+                fontSize: 13,
+                fontWeight: '600',
+              }}
+            >
+              {appState.theme === 'dark' ? 'Dark' : 'Light'}
             </Text>
           </TouchableOpacity>
         </View>
@@ -108,7 +113,7 @@ export default function HomeScreen() {
           style={{
             flexDirection: 'row',
             marginTop: 18,
-            gap: 12,
+            gap: 10,
           }}
         >
           <View
@@ -152,24 +157,29 @@ export default function HomeScreen() {
                 marginTop: 4,
               }}
             >
-              {pendingTasks}
+              {pendingCount}
             </Text>
           </View>
         </View>
       </GlassCard>
 
-      {/* Smart Study Assistant */}
+      {/* Smart Study Assistant card */}
       <GlassCard colors={colors}>
         <SectionTitle
           colors={colors}
           label="Smart Study Assistant"
-          icon={
-            <Ionicons name="sparkles" size={22} color={colors.neonCyan} />
-          }
+          icon={<Ionicons name="sparkles" size={22} color={colors.neonCyan} />}
         />
-        <Text style={{ color: colors.textMuted, fontSize: 14, marginBottom: 6 }}>
-          Simple smart tips based on your attendance & tasks. Later you can
-          plug real AI API here.
+
+        <Text
+          style={{
+            color: colors.textMuted,
+            fontSize: 14,
+            marginBottom: 8,
+          }}
+        >
+          This is local logic. Later you can hook it to a real AI API and send
+          attendance + tasks for smarter plans.
         </Text>
 
         <Text style={{ color: colors.text, fontSize: 15, marginTop: 4 }}>
@@ -185,51 +195,66 @@ export default function HomeScreen() {
           .
         </Text>
 
-        {insights && (
-          <Text style={{ color: colors.text, fontSize: 15, marginTop: 4 }}>
-            ⚠ Most risky subject:{' '}
-            <Text
-              style={{ color: colors.neonPink, fontWeight: '700' }}
-            >
-              {insights.lowest.name}
-            </Text>{' '}
-            at {insights.pct}% – give it some extra love today.
+        <Text style={{ color: colors.text, fontSize: 15, marginTop: 4 }}>
+          🎯 Today, put extra focus on{' '}
+          <Text
+            style={{
+              color: colors.neonPink,
+              fontWeight: '700',
+            }}
+          >
+            {mainSubject}
           </Text>
-        )}
+          . Even 45 minutes of solid revision can save your internals.
+        </Text>
 
         <Text style={{ color: colors.text, fontSize: 15, marginTop: 4 }}>
           ✅ You have{' '}
           <Text
-            style={{ color: colors.neonCyan, fontWeight: '700' }}
+            style={{
+              color: colors.neonCyan,
+              fontWeight: '700',
+            }}
           >
-            {pendingTasks}
+            {pendingCount}
           </Text>{' '}
-          pending tasks. Finish at least{' '}
-          <Text style={{ fontWeight: '700' }}>one important</Text> item
-          before you touch Instagram 😈.
+          pending task(s). Finish at least{' '}
+          <Text style={{ fontWeight: '700' }}>one major</Text> item before
+          sleeping.
         </Text>
 
-        <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 8 }}>
-          Future: send your data to `/ai-plan` backend and show a generated
-          daily study plan.
+        <Text
+          style={{
+            color: colors.textMuted,
+            fontSize: 12,
+            marginTop: 10,
+          }}
+        >
+          (Future idea) – call a backend route like{' '}
+          <Text style={{ fontWeight: '600' }}>/ai-plan</Text> that returns a
+          daily plan for you.
         </Text>
       </GlassCard>
 
-      {/* Quick Timetable Glance */}
+      {/* Quick timetable glance */}
       <GlassCard colors={colors}>
         <SectionTitle
           colors={colors}
-          label="Quick Timetable Glance"
-          icon={
-            <Ionicons name="calendar" size={22} color={colors.neonCyan} />
-          }
+          label="Timetable Glance"
+          icon={<Ionicons name="calendar" size={22} color={colors.neonCyan} />}
         />
-        <Text style={{ color: colors.textMuted, fontSize: 14, marginBottom: 10 }}>
-          First two slots from each day. Edit full timetable in the Timetable
-          tab.
+        <Text
+          style={{
+            color: colors.textMuted,
+            fontSize: 13,
+            marginBottom: 8,
+          }}
+        >
+          First two slots of each day. Edit full timetable in the Timetable tab.
         </Text>
-        {Object.entries(state.timetable).map(([day, slots]) => (
-          <View key={day} style={{ marginBottom: 8 }}>
+
+        {Object.entries(appState.timetable).map(([day, slots]) => (
+          <View key={day} style={{ marginBottom: 6 }}>
             <Text
               style={{
                 color: colors.text,
@@ -239,7 +264,12 @@ export default function HomeScreen() {
             >
               {day}
             </Text>
-            <Text style={{ color: colors.textMuted, fontSize: 13 }}>
+            <Text
+              style={{
+                color: colors.textMuted,
+                fontSize: 13,
+              }}
+            >
               {slots.length === 0
                 ? 'No classes saved.'
                 : slots.slice(0, 2).join(' • ')}

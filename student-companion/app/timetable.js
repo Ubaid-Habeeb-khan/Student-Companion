@@ -7,46 +7,67 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import GlassCard from '../components/GlassCard';
 import SectionTitle from '../components/SectionTitle';
-import { useApp, useThemeColors } from '../context/AppContext';
+import { useAppContext } from '../context/AppContext';
+
+const styles = StyleSheet.create({
+  input: {
+    borderWidth: 1,
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: Platform.OS === 'ios' ? 9 : 8,
+    fontSize: 14,
+  },
+  button: {
+    borderRadius: 999,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+});
+
+function appBackgroundForInput(secondary, bg) {
+  return Platform.OS === 'ios' ? secondary : bg;
+}
 
 export default function TimetableScreen() {
-  const { state, setPart } = useApp();
-  const { colors } = useThemeColors();
+  const { appState, setPart, colors } = useAppContext();
   const [selectedDay, setSelectedDay] = useState('Monday');
   const [newSlot, setNewSlot] = useState('');
 
-  const days = Object.keys(state.timetable);
-
-  const setTimetable = (tt) => setPart('timetable', tt);
+  const timetable = appState.timetable;
+  const days = Object.keys(timetable);
 
   const addSlot = () => {
     if (!newSlot.trim()) return;
-    setTimetable({
-      ...state.timetable,
-      [selectedDay]: [...state.timetable[selectedDay], newSlot.trim()],
-    });
+    setPart('timetable', (prev) => ({
+      ...prev,
+      [selectedDay]: [...prev[selectedDay], newSlot.trim()],
+    }));
     setNewSlot('');
   };
 
   return (
     <ScrollView
       style={{ flex: 1 }}
-      contentContainerStyle={{ padding: 16, paddingBottom: 90, gap: 16 }}
+      contentContainerStyle={{ padding: 16, paddingBottom: 96, gap: 18 }}
     >
       <GlassCard colors={colors}>
         <SectionTitle
           colors={colors}
           label="Timetable"
-          icon={<Ionicons name="calendar" size={24} color={colors.neonCyan} />}
+          icon={<Ionicons name="calendar" size={22} color={colors.neonCyan} />}
         />
+
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          style={{ marginBottom: 12 }}
+          style={{ marginBottom: 10 }}
         >
           <View style={{ flexDirection: 'row', gap: 8 }}>
             {days.map((d) => (
@@ -63,7 +84,7 @@ export default function TimetableScreen() {
                   backgroundColor:
                     selectedDay === d
                       ? 'rgba(34,211,238,0.15)'
-                      : 'rgba(15,23,42,0.7)',
+                      : 'rgba(15,23,42,0.55)',
                 }}
               >
                 <Text
@@ -81,8 +102,11 @@ export default function TimetableScreen() {
           </View>
         </ScrollView>
 
-        <Text style={{ color: colors.textMuted, fontSize: 14, marginBottom: 8 }}>
-          Add class slots like <Text>“9–10 DSA”</Text>, <Text>“10–11 DBMS”</Text>.
+        <Text
+          style={{ color: colors.textMuted, fontSize: 13, marginBottom: 8 }}
+        >
+          Add class slots like <Text style={{ fontWeight: '700' }}>9–10 DSA</Text>,{' '}
+          <Text style={{ fontWeight: '700' }}>10–11 DBMS</Text>.
         </Text>
 
         <View style={{ flexDirection: 'row', gap: 10, marginBottom: 10 }}>
@@ -97,7 +121,10 @@ export default function TimetableScreen() {
                 flex: 1,
                 borderColor: colors.border,
                 color: colors.text,
-                backgroundColor: 'rgba(15,23,42,0.7)',
+                backgroundColor: appBackgroundForInput(
+                  colors.bgSecondary,
+                  colors.bg
+                ),
               },
             ]}
           />
@@ -108,18 +135,20 @@ export default function TimetableScreen() {
               { backgroundColor: colors.accent, paddingHorizontal: 18 },
             ]}
           >
-            <Text style={{ color: 'white', fontWeight: '700', fontSize: 14 }}>
+            <Text
+              style={{ color: 'white', fontWeight: '700', fontSize: 14 }}
+            >
               Add
             </Text>
           </TouchableOpacity>
         </View>
 
-        {state.timetable[selectedDay].length === 0 ? (
+        {timetable[selectedDay].length === 0 ? (
           <Text style={{ color: colors.textMuted, fontSize: 14 }}>
-            No slots yet. Add above.
+            No slots yet for {selectedDay}. Add above.
           </Text>
         ) : (
-          state.timetable[selectedDay].map((slot, idx) => (
+          timetable[selectedDay].map((slot, idx) => (
             <View
               key={idx.toString()}
               style={{
@@ -127,11 +156,19 @@ export default function TimetableScreen() {
                 borderRadius: 18,
                 borderWidth: 1,
                 borderColor: colors.border,
-                backgroundColor: 'rgba(15,23,42,0.7)',
-                marginBottom: 8,
+                backgroundColor: 'rgba(15,23,42,0.55)',
+                marginBottom: 6,
               }}
             >
-              <Text style={{ color: colors.text, fontSize: 15 }}>{slot}</Text>
+              <Text
+                style={{
+                  color: colors.text,
+                  fontSize: 15,
+                  fontWeight: '600',
+                }}
+              >
+                {slot}
+              </Text>
             </View>
           ))
         )}
@@ -139,20 +176,3 @@ export default function TimetableScreen() {
     </ScrollView>
   );
 }
-
-const styles = StyleSheet.create({
-  input: {
-    borderWidth: 1,
-    borderRadius: 18,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    fontSize: 15,
-  },
-  button: {
-    borderRadius: 999,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});

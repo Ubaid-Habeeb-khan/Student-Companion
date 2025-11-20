@@ -7,290 +7,288 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
+  Platform,
 } from 'react-native';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import GlassCard from '../components/GlassCard';
 import SectionTitle from '../components/SectionTitle';
-import { useApp, useThemeColors } from '../context/AppContext';
+import { useAppContext } from '../context/AppContext';
 
-function calcSemesterGpa(subjects) {
-  let totalCredits = 0;
-  let weighted = 0;
-  subjects.forEach((s) => {
-    const c = parseFloat(s.credits || '0');
-    const g = parseFloat(s.grade || '0');
-    if (!isNaN(c) && !isNaN(g)) {
-      totalCredits += c;
-      weighted += c * g;
-    }
-  });
-  if (totalCredits === 0) return { gpa: null, credits: 0 };
-  return { gpa: weighted / totalCredits, credits: totalCredits };
+const styles = StyleSheet.create({
+  input: {
+    borderWidth: 1,
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: Platform.OS === 'ios' ? 9 : 8,
+    fontSize: 14,
+  },
+  button: {
+    borderRadius: 999,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+});
+
+function appBackgroundForInput(secondary, bg) {
+  return Platform.OS === 'ios' ? secondary : bg;
 }
 
 export default function CGPAScreen() {
-  const { state, setPart } = useApp();
-  const { colors } = useThemeColors();
-  const [local, setLocal] = useState(state.cgpaData);
-  const [semResult, setSemResult] = useState(null);
-  const [overallResult, setOverallResult] = useState(null);
-
-  const updateAndStore = (next) => {
-    setLocal(next);
-    setPart('cgpaData', next);
+  const { appState, setPart, colors } = useAppContext();
+  const cgpaData = appState.cgpaData || {
+    currentCgpa: '',
+    currentCredits: '',
+    thisSemSgpa: '',
+    thisSemCredits: '',
   };
 
-  const updateSubjectField = (id, field, value) => {
-    const subjects = local.subjects.map((s) =>
-      s.id === id ? { ...s, [field]: value } : s
+  const [subjects, setSubjects] = useState([
+    { id: '1', name: 'Sub 1', credits: '4', gradePoint: '8' },
+    { id: '2', name: 'Sub 2', credits: '4', gradePoint: '9' },
+  ]);
+  const [sgpa, setSgpa] = useState(null);
+  const [overall, setOverall] = useState(null);
+
+  const updateSubject = (id, field, value) => {
+    setSubjects((prev) =>
+      prev.map((s) =>
+        s.id === id ? { ...s, [field]: value } : s
+      )
     );
-    updateAndStore({ ...local, subjects });
   };
 
   const addSubject = () => {
-    const newSub = {
-      id: Date.now().toString(),
-      name: '',
-      credits: '',
-      grade: '',
-    };
-    updateAndStore({ ...local, subjects: [...local.subjects, newSub] });
+    setSubjects((prev) => [
+      ...prev,
+      {
+        id: Date.now().toString(),
+        name: `Sub ${prev.length + 1}`,
+        credits: '4',
+        gradePoint: '8',
+      },
+    ]);
   };
 
-  const calculate = () => {
-    const { gpa, credits } = calcSemesterGpa(local.subjects);
-    if (!gpa || credits === 0) {
-      setSemResult(null);
-      setOverallResult(null);
-      return;
-    }
-    setSemResult({ gpa: gpa.toFixed(2), credits });
-
-    const existingCg = parseFloat(local.existingCgpa || '0');
-    const existingCr = parseFloat(local.existingCredits || '0');
-
-    if (existingCr === 0 && credits === 0) {
-      setOverallResult(null);
-      return;
-    }
-
-    const newOverall =
-      (existingCg * existingCr + gpa * credits) / (existingCr + credits);
-
-    setOverallResult({
-      cgpa: newOverall.toFixed(2),
-      totalCredits: existingCr + credits,
+  const calcSgpa = () => {
+    let totalCredits = 0;
+    let totalPoints = 0;
+    subjects.forEach((s) => {
+      const c = parseFloat(s.credits || '0');
+      const g = parseFloat(s.gradePoint || '0');
+      if (c > 0 && g >= 0) {
+        totalCredits += c;
+        totalPoints += c * g;
+      }
     });
+    if (!totalCredits) {
+      setSgpa(null);
+      return;
+    }
+    const res = totalPoints / totalCredits;
+    setSgpa(res.toFixed(2));
+    // also push into thisSemSgpa
+    setPart('cgpaData', (prev) => ({
+      ...prev,
+      thisSemSgpa: res.toFixed(2),
+      thisSemCredits: String(totalCredits),
+    }));
+  };
+
+  const calcOverall = () => {
+    const currentCgpa = parseFloat(cgpaData.currentCgpa || '0');
+    const currentCredits = parseFloat(cgpaData.currentCredits || '0');
+    const thisSemSgpa = parseFloat(cgpaData.thisSemSgpa || '0');
+    const thisSemCredits = parseFloat(cgpaData.thisSemCredits || '0');
+
+    if (currentCredits + thisSemCredits === 0) {
+      setOverall(null);
+      return;
+    }
+    const res =
+      (currentCgpa * currentCredits +
+        thisSemSgpa * thisSemCredits) /
+      (currentCredits + thisSemCredits);
+    setOverall(res.toFixed(2));
+  };
+
+  const updateCgField = (field, value) => {
+    setPart('cgpaData', (prev) => ({
+      ...prev,
+      [field]: value,
+    }));
   };
 
   return (
     <ScrollView
       style={{ flex: 1 }}
-      contentContainerStyle={{ padding: 16, paddingBottom: 90, gap: 16 }}
+      contentContainerStyle={{ padding: 16, paddingBottom: 96, gap: 18 }}
     >
+      {/* Semester SGPA from subjects */}
       <GlassCard colors={colors}>
         <SectionTitle
           colors={colors}
-          label="CGPA Planner"
-          icon={<Ionicons name="calculator" size={24} color={colors.neonCyan} />}
+          label="Semester SGPA (Subject-wise)"
+          icon={<MaterialIcons name="calculate" size={22} color={colors.neonCyan} />}
         />
-        <Text style={{ color: colors.textMuted, fontSize: 14, marginBottom: 10 }}>
-          Enter your **existing overall CGPA & credits**, then add subjects of
-          this sem with their **credits & grade points**. We’ll show:
-          {'\n'}• Semester GPA{'\n'}• Updated overall CGPA
+        <Text
+          style={{ color: colors.textMuted, fontSize: 14, marginBottom: 8 }}
+        >
+          Enter each subject&apos;s credits and grade point (0–10). We&apos;ll
+          compute your semester SGPA.
         </Text>
 
-        <View style={{ flexDirection: 'row', gap: 12, marginBottom: 10 }}>
-          <View style={{ flex: 1 }}>
-            <Text style={{ color: colors.textMuted, fontSize: 13 }}>
-              Existing Overall CGPA
-            </Text>
-            <TextInput
-              value={local.existingCgpa}
-              onChangeText={(v) =>
-                updateAndStore({ ...local, existingCgpa: v })
-              }
-              keyboardType="numeric"
-              style={[
-                styles.input,
-                {
-                  borderColor: colors.border,
-                  color: colors.text,
-                  backgroundColor: 'rgba(15,23,42,0.6)',
-                },
-              ]}
-              placeholder="e.g. 8.2"
-              placeholderTextColor={colors.textMuted}
-            />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={{ color: colors.textMuted, fontSize: 13 }}>
-              Existing Total Credits
-            </Text>
-            <TextInput
-              value={local.existingCredits}
-              onChangeText={(v) =>
-                updateAndStore({ ...local, existingCredits: v })
-              }
-              keyboardType="numeric"
-              style={[
-                styles.input,
-                {
-                  borderColor: colors.border,
-                  color: colors.text,
-                  backgroundColor: 'rgba(15,23,42,0.6)',
-                },
-              ]}
-              placeholder="e.g. 60"
-              placeholderTextColor={colors.textMuted}
-            />
-          </View>
-        </View>
-      </GlassCard>
-
-      <GlassCard colors={colors}>
-        <SectionTitle
-          colors={colors}
-          label="Current Semester (subject-wise)"
-          icon={
-            <MaterialIcons
-              name="menu-book"
-              size={24}
-              color={colors.neonCyan}
-            />
-          }
-        />
-        <Text style={{ color: colors.textMuted, fontSize: 14, marginBottom: 10 }}>
-          For each subject, fill:
-          {'\n'}• Name (optional, just for you){'\n'}• Credits (e.g. 3, 4){'\n'}
-          • Grade point (e.g. 10, 9, 8 etc.)
-        </Text>
-
-        {local.subjects.map((s) => (
+        {subjects.map((sub) => (
           <View
-            key={s.id}
+            key={sub.id}
             style={{
-              padding: 14,
-              borderRadius: 20,
-              borderWidth: 1,
-              borderColor: colors.border,
-              backgroundColor: 'rgba(15,23,42,0.7)',
-              marginBottom: 10,
+              flexDirection: 'row',
+              gap: 8,
+              marginBottom: 8,
             }}
           >
-            <TextInput
-              placeholder="Subject name (e.g. DSA)"
-              placeholderTextColor={colors.textMuted}
-              value={s.name}
-              onChangeText={(v) => updateSubjectField(s.id, 'name', v)}
-              style={[
-                styles.input,
-                {
-                  borderColor: colors.border,
-                  color: colors.text,
-                  backgroundColor: 'rgba(15,23,42,0.7)',
-                  marginBottom: 8,
-                },
-              ]}
-            />
-            <View style={{ flexDirection: 'row', gap: 10 }}>
-              <View style={{ flex: 1 }}>
-                <Text style={{ color: colors.textMuted, fontSize: 13 }}>
-                  Credits
-                </Text>
-                <TextInput
-                  keyboardType="numeric"
-                  value={s.credits}
-                  onChangeText={(v) => updateSubjectField(s.id, 'credits', v)}
-                  style={[
-                    styles.input,
-                    {
-                      borderColor: colors.border,
-                      color: colors.text,
-                      backgroundColor: 'rgba(15,23,42,0.7)',
-                    },
-                  ]}
-                  placeholder="e.g. 4"
-                  placeholderTextColor={colors.textMuted}
-                />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={{ color: colors.textMuted, fontSize: 13 }}>
-                  Grade Point
-                </Text>
-                <TextInput
-                  keyboardType="numeric"
-                  value={s.grade}
-                  onChangeText={(v) => updateSubjectField(s.id, 'grade', v)}
-                  style={[
-                    styles.input,
-                    {
-                      borderColor: colors.border,
-                      color: colors.text,
-                      backgroundColor: 'rgba(15,23,42,0.7)',
-                    },
-                  ]}
-                  placeholder="e.g. 9"
-                  placeholderTextColor={colors.textMuted}
-                />
-              </View>
+            <View style={{ flex: 1 }}>
+              <Text
+                style={{ color: colors.textMuted, fontSize: 12 }}
+              >
+                Subject
+              </Text>
+              <TextInput
+                value={sub.name}
+                onChangeText={(v) => updateSubject(sub.id, 'name', v)}
+                style={[
+                  styles.input,
+                  {
+                    borderColor: colors.border,
+                    color: colors.text,
+                    backgroundColor: appBackgroundForInput(
+                      colors.bgSecondary,
+                      colors.bg
+                    ),
+                  },
+                ]}
+                placeholder="Subject"
+                placeholderTextColor={colors.textMuted}
+              />
+            </View>
+            <View style={{ width: 70 }}>
+              <Text
+                style={{ color: colors.textMuted, fontSize: 12 }}
+              >
+                Credits
+              </Text>
+              <TextInput
+                value={sub.credits}
+                onChangeText={(v) =>
+                  updateSubject(sub.id, 'credits', v)
+                }
+                keyboardType="numeric"
+                style={[
+                  styles.input,
+                  {
+                    borderColor: colors.border,
+                    color: colors.text,
+                    backgroundColor: appBackgroundForInput(
+                      colors.bgSecondary,
+                      colors.bg
+                    ),
+                  },
+                ]}
+                placeholder="4"
+                placeholderTextColor={colors.textMuted}
+              />
+            </View>
+            <View style={{ width: 80 }}>
+              <Text
+                style={{ color: colors.textMuted, fontSize: 12 }}
+              >
+                Grade
+              </Text>
+              <TextInput
+                value={sub.gradePoint}
+                onChangeText={(v) =>
+                  updateSubject(sub.id, 'gradePoint', v)
+                }
+                keyboardType="numeric"
+                style={[
+                  styles.input,
+                  {
+                    borderColor: colors.border,
+                    color: colors.text,
+                    backgroundColor: appBackgroundForInput(
+                      colors.bgSecondary,
+                      colors.bg
+                    ),
+                  },
+                ]}
+                placeholder="8"
+                placeholderTextColor={colors.textMuted}
+              />
             </View>
           </View>
         ))}
 
-        <TouchableOpacity
-          onPress={addSubject}
-          style={[
-            styles.button,
-            {
-              backgroundColor: colors.accentSoft,
-              flexDirection: 'row',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 6,
-            },
-          ]}
-        >
-          <Ionicons name="add" size={18} color={colors.neonCyan} />
-          <Text
-            style={{ color: colors.text, fontWeight: '700', fontSize: 14 }}
+        <View style={{ flexDirection: 'row', gap: 10, marginTop: 6 }}>
+          <TouchableOpacity
+            onPress={addSubject}
+            style={[
+              styles.button,
+              {
+                flex: 1,
+                backgroundColor: colors.accentSoft,
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 6,
+              },
+            ]}
           >
-            Add another subject
-          </Text>
-        </TouchableOpacity>
-      </GlassCard>
+            <Ionicons
+              name="add-circle-outline"
+              size={18}
+              color={colors.neonCyan}
+            />
+            <Text
+              style={{
+                color: colors.text,
+                fontWeight: '700',
+                fontSize: 14,
+              }}
+            >
+              Add Subject
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={calcSgpa}
+            style={[
+              styles.button,
+              { flex: 1, backgroundColor: colors.accent },
+            ]}
+          >
+            <Text
+              style={{ color: 'white', fontWeight: '700', fontSize: 14 }}
+            >
+              Calculate SGPA
+            </Text>
+          </TouchableOpacity>
+        </View>
 
-      <GlassCard colors={colors}>
-        <SectionTitle
-          colors={colors}
-          label="Results"
-          icon={<MaterialIcons name="insights" size={24} color={colors.neonCyan} />}
-        />
-        <TouchableOpacity
-          onPress={calculate}
-          style={[
-            styles.button,
-            { backgroundColor: colors.accent, marginBottom: 12 },
-          ]}
-        >
-          <Text style={{ color: 'white', fontWeight: '800', fontSize: 15 }}>
-            Calculate semester & overall CGPA
-          </Text>
-        </TouchableOpacity>
-
-        {semResult && (
+        {sgpa && (
           <View
             style={{
-              padding: 14,
-              borderRadius: 20,
+              marginTop: 10,
+              padding: 12,
+              borderRadius: 18,
               borderWidth: 1,
               borderColor: colors.accent,
               backgroundColor: colors.accentSoft,
-              marginBottom: 10,
             }}
           >
-            <Text style={{ color: colors.textMuted, fontSize: 13 }}>
-              This semester GPA
+            <Text
+              style={{ color: colors.textMuted, fontSize: 12 }}
+            >
+              This Semester SGPA
             </Text>
             <Text
               style={{
@@ -299,63 +297,183 @@ export default function CGPAScreen() {
                 fontWeight: '800',
               }}
             >
-              {semResult.gpa} ({semResult.credits} credits)
+              {sgpa}
             </Text>
           </View>
         )}
+      </GlassCard>
 
-        {overallResult && (
+      {/* Overall CGPA */}
+      <GlassCard colors={colors}>
+        <SectionTitle
+          colors={colors}
+          label="Overall CGPA"
+          icon={<Ionicons name="calculator" size={22} color={colors.neonCyan} />}
+        />
+
+        <Text
+          style={{ color: colors.textMuted, fontSize: 14, marginBottom: 8 }}
+        >
+          Enter your current CGPA & total credits, plus this semester&apos;s SGPA
+          and credits. We&apos;ll show the new CGPA.
+        </Text>
+
+        <View style={{ flexDirection: 'row', gap: 10, marginBottom: 10 }}>
+          <View style={{ flex: 1 }}>
+            <Text
+              style={{ color: colors.textMuted, fontSize: 12 }}
+            >
+              Current CGPA
+            </Text>
+            <TextInput
+              value={cgpaData.currentCgpa}
+              onChangeText={(v) =>
+                updateCgField('currentCgpa', v)
+              }
+              keyboardType="numeric"
+              style={[
+                styles.input,
+                {
+                  borderColor: colors.border,
+                  color: colors.text,
+                  backgroundColor: appBackgroundForInput(
+                    colors.bgSecondary,
+                    colors.bg
+                  ),
+                },
+              ]}
+              placeholder="8.2"
+              placeholderTextColor={colors.textMuted}
+            />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text
+              style={{ color: colors.textMuted, fontSize: 12 }}
+            >
+              Current Credits
+            </Text>
+            <TextInput
+              value={cgpaData.currentCredits}
+              onChangeText={(v) =>
+                updateCgField('currentCredits', v)
+              }
+              keyboardType="numeric"
+              style={[
+                styles.input,
+                {
+                  borderColor: colors.border,
+                  color: colors.text,
+                  backgroundColor: appBackgroundForInput(
+                    colors.bgSecondary,
+                    colors.bg
+                  ),
+                },
+              ]}
+              placeholder="60"
+              placeholderTextColor={colors.textMuted}
+            />
+          </View>
+        </View>
+
+        <View style={{ flexDirection: 'row', gap: 10, marginBottom: 10 }}>
+          <View style={{ flex: 1 }}>
+            <Text
+              style={{ color: colors.textMuted, fontSize: 12 }}
+            >
+              This Sem SGPA
+            </Text>
+            <TextInput
+              value={cgpaData.thisSemSgpa}
+              onChangeText={(v) =>
+                updateCgField('thisSemSgpa', v)
+              }
+              keyboardType="numeric"
+              style={[
+                styles.input,
+                {
+                  borderColor: colors.border,
+                  color: colors.text,
+                  backgroundColor: appBackgroundForInput(
+                    colors.bgSecondary,
+                    colors.bg
+                  ),
+                },
+              ]}
+              placeholder="9.0"
+              placeholderTextColor={colors.textMuted}
+            />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text
+              style={{ color: colors.textMuted, fontSize: 12 }}
+            >
+              This Sem Credits
+            </Text>
+            <TextInput
+              value={cgpaData.thisSemCredits}
+              onChangeText={(v) =>
+                updateCgField('thisSemCredits', v)
+              }
+              keyboardType="numeric"
+              style={[
+                styles.input,
+                {
+                  borderColor: colors.border,
+                  color: colors.text,
+                  backgroundColor: appBackgroundForInput(
+                    colors.bgSecondary,
+                    colors.bg
+                  ),
+                },
+              ]}
+              placeholder="20"
+              placeholderTextColor={colors.textMuted}
+            />
+          </View>
+        </View>
+
+        <TouchableOpacity
+          onPress={calcOverall}
+          style={[
+            styles.button,
+            { backgroundColor: colors.accent, marginBottom: 8 },
+          ]}
+        >
+          <Text
+            style={{ color: 'white', fontWeight: '700', fontSize: 14 }}
+          >
+            Calculate Overall CGPA
+          </Text>
+        </TouchableOpacity>
+
+        {overall && (
           <View
             style={{
-              padding: 14,
-              borderRadius: 20,
+              marginTop: 8,
+              padding: 12,
+              borderRadius: 18,
               borderWidth: 1,
-              borderColor: colors.success,
-              backgroundColor: 'rgba(22,163,74,0.15)',
+              borderColor: colors.accent,
+              backgroundColor: colors.accentSoft,
             }}
           >
-            <Text style={{ color: colors.textMuted, fontSize: 13 }}>
-              Updated overall CGPA
+            <Text
+              style={{ color: colors.textMuted, fontSize: 12 }}
+            >
+              New Overall CGPA
             </Text>
             <Text
               style={{
-                color: colors.success,
+                color: colors.neonCyan,
                 fontSize: 26,
                 fontWeight: '800',
               }}
             >
-              {overallResult.cgpa}
-            </Text>
-            <Text style={{ color: colors.textMuted, fontSize: 13, marginTop: 4 }}>
-              Total credits considered: {overallResult.totalCredits}
+              {overall}
             </Text>
           </View>
-        )}
-
-        {!semResult && !overallResult && (
-          <Text style={{ color: colors.textMuted, fontSize: 14 }}>
-            Fill subject credits + grade points and hit **Calculate** to see
-            semester GPA and overall CGPA.
-          </Text>
         )}
       </GlassCard>
     </ScrollView>
   );
 }
-
-const styles = StyleSheet.create({
-  input: {
-    borderWidth: 1,
-    borderRadius: 18,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    fontSize: 15,
-  },
-  button: {
-    borderRadius: 999,
-    paddingVertical: 11,
-    paddingHorizontal: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});

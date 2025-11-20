@@ -1,7 +1,6 @@
 {
-   "main": "index.js",
-  "name": "student-companion",
   "main": "expo-router/entry",
+  "name": "student-companion",
   "version": "1.0.0",
   "scripts": {
     "start": "expo start",
@@ -47,8 +46,10 @@
     "eslint": "^9.25.0",
     "eslint-config-expo": "~10.0.0"
   },
-   "expo": {
-    "plugins": ["expo-router"]
+  "expo": {
+    "plugins": [
+      "expo-router"
+    ]
   },
   "private": true
 }

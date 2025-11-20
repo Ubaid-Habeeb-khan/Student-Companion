@@ -9,6 +9,7 @@ export default function SectionTitle({ colors, icon, label }) {
         flexDirection: 'row',
         alignItems: 'center',
         marginBottom: 10,
+        gap: 8,
       }}
     >
       {icon}
@@ -17,7 +18,6 @@ export default function SectionTitle({ colors, icon, label }) {
           color: colors.text,
           fontSize: 18,
           fontWeight: '700',
-          marginLeft: 8,
         }}
       >
         {label}

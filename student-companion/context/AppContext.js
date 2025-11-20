@@ -1,11 +1,39 @@
 // context/AppContext.js
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { lightColors, darkColors } from '../constants/colors';
+import { useColorScheme } from 'react-native';
 
 const STORAGE_KEY = 'student-companion-v2';
 
-const AppContext = createContext(null);
+const lightColors = {
+  bg: '#f3f4f6',
+  bgSecondary: 'rgba(255,255,255,0.9)',
+  card: 'rgba(255,255,255,0.95)',
+  border: 'rgba(15,23,42,0.08)',
+  text: '#020617',
+  textMuted: '#6b7280',
+  accent: '#6366f1',
+  accentSoft: 'rgba(99,102,241,0.12)',
+  danger: '#f97373',
+  success: '#22c55e',
+  neonCyan: '#22d3ee',
+  neonPink: '#fb37ff',
+};
+
+const darkColors = {
+  bg: '#020617',
+  bgSecondary: 'rgba(15,23,42,0.96)',
+  card: 'rgba(15,23,42,0.9)',
+  border: 'rgba(148,163,184,0.2)',
+  text: '#e5e7eb',
+  textMuted: '#9ca3af',
+  accent: '#6366f1',
+  accentSoft: 'rgba(99,102,241,0.25)',
+  danger: '#f97373',
+  success: '#22c55e',
+  neonCyan: '#22d3ee',
+  neonPink: '#fb37ff',
+};
 
 const defaultState = {
   theme: 'dark',
@@ -33,69 +61,78 @@ const defaultState = {
     semester: '3rd Sem',
   },
   cgpaData: {
-    existingCgpa: '8.2',
-    existingCredits: '60',
-    subjects: [
-      { id: '1', name: 'DSA', credits: '4', grade: '9' },
-      { id: '2', name: 'OS', credits: '4', grade: '8' },
-    ],
+    currentCgpa: '8.2',
+    currentCredits: '60',
+    thisSemSgpa: '9.0',
+    thisSemCredits: '20',
   },
-  docs: [],
 };
 
-export function AppProvider({ children }) {
-  const [state, setState] = useState(defaultState);
+const AppContext = createContext(null);
 
-  // Load
+export const AppProvider = ({ children }) => {
+  const systemScheme = useColorScheme();
+  const [appState, setAppState] = useState({
+    ...defaultState,
+    theme: systemScheme === 'dark' ? 'dark' : 'light',
+  });
+  const [hydrated, setHydrated] = useState(false);
+
+  // Load from storage
   useEffect(() => {
     (async () => {
       try {
         const saved = await AsyncStorage.getItem(STORAGE_KEY);
         if (saved) {
           const parsed = JSON.parse(saved);
-          setState((prev) => ({ ...prev, ...parsed }));
+          setAppState((prev) => ({
+            ...prev,
+            ...parsed,
+          }));
         }
       } catch (e) {
         console.log('Failed to load state', e);
+      } finally {
+        setHydrated(true);
       }
     })();
   }, []);
 
-  // Save
+  // Save to storage
   useEffect(() => {
-    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(state)).catch((e) =>
-      console.log('Failed to save app state', e)
+    if (!hydrated) return;
+    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(appState)).catch((e) =>
+      console.log('Failed to save', e)
     );
-  }, [state]);
+  }, [appState, hydrated]);
 
-  const setPart = (key, value) => {
-    setState((prev) => ({ ...prev, [key]: value }));
+  const setPart = (key, valueOrUpdater) => {
+    setAppState((prev) => {
+      const prevSlice = prev[key];
+      const nextSlice =
+        typeof valueOrUpdater === 'function'
+          ? valueOrUpdater(prevSlice)
+          : valueOrUpdater;
+      return { ...prev, [key]: nextSlice };
+    });
   };
 
   const toggleTheme = () => {
-    setState((prev) => ({
+    setAppState((prev) => ({
       ...prev,
       theme: prev.theme === 'dark' ? 'light' : 'dark',
     }));
   };
 
-  const value = {
-    state,
-    setPart,
-    toggleTheme,
-  };
+  const colors = appState.theme === 'dark' ? darkColors : lightColors;
 
-  return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
-}
+  return (
+    <AppContext.Provider
+      value={{ appState, setAppState, setPart, toggleTheme, colors, hydrated }}
+    >
+      {children}
+    </AppContext.Provider>
+  );
+};
 
-export function useApp() {
-  const ctx = useContext(AppContext);
-  if (!ctx) throw new Error('useApp must be used inside AppProvider');
-  return ctx;
-}
-
-export function useThemeColors() {
-  const { state } = useApp();
-  const colors = state.theme === 'dark' ? darkColors : lightColors;
-  return { theme: state.theme, colors };
-}
+export const useAppContext = () => useContext(AppContext);

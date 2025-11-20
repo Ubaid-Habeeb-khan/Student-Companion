@@ -20,7 +20,7 @@ export default function GlassCard({ colors, children, style }) {
         useNativeDriver: true,
       }),
     ]).start();
-  }, []);
+  }, [fadeAnim, scaleAnim]);
 
   return (
     <Animated.View
@@ -37,7 +37,7 @@ export default function GlassCard({ colors, children, style }) {
           colors.bgSecondary,
           Platform.OS === 'ios'
             ? 'rgba(148,163,184,0.18)'
-            : 'rgba(15,23,42,0.8)',
+            : 'rgba(15,23,42,0.9)',
         ]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
@@ -47,8 +47,8 @@ export default function GlassCard({ colors, children, style }) {
           borderWidth: 1,
           borderColor: colors.border,
           shadowColor: colors.neonCyan,
-          shadowOpacity: 0.4,
-          shadowRadius: 18,
+          shadowOpacity: 0.35,
+          shadowRadius: 20,
           shadowOffset: { width: 0, height: 10 },
           elevation: 10,
         }}

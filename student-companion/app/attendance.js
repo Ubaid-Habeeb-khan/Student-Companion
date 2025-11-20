@@ -1,5 +1,5 @@
 // app/attendance.js
-import React, { useState, useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   ScrollView,
   View,
@@ -7,11 +7,12 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
+  Platform,
 } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import GlassCard from '../components/GlassCard';
 import SectionTitle from '../components/SectionTitle';
-import { useApp, useThemeColors } from '../context/AppContext';
+import { useAppContext } from '../context/AppContext';
 
 function calcOverall(subjects) {
   let a = 0;
@@ -23,92 +24,105 @@ function calcOverall(subjects) {
   return t === 0 ? 0 : Math.round((a / t) * 100);
 }
 
-function getInsights(subjects) {
+function getAttendanceInsights(subjects) {
   if (!subjects.length) return null;
   const sorted = [...subjects].sort(
-    (x, y) => x.attended / (x.total || 1) - y.attended / (y.total || 1)
+    (a, b) => a.attended / (a.total || 1) - b.attended / (b.total || 1)
   );
   const lowest = sorted[0];
   const target = 75;
-  const pct =
-    lowest.total === 0
-      ? 0
-      : Math.round((lowest.attended / lowest.total) * 100);
+  const curPct =
+    lowest.total === 0 ? 0 : Math.round((lowest.attended / lowest.total) * 100);
 
-  // How many more classes must attend in worst subject
-  let need = 0;
-  let A = lowest.attended;
-  let T = lowest.total;
-  const ratio = target / 100;
-  while (T > 0 && Math.round((A / T) * 100) < target && need < 200) {
-    A += 1;
-    T += 1;
-    need += 1;
+  // Needed classes to reach 75% if attending all
+  let needed = 0;
+  if (curPct < target) {
+    const P = target / 100;
+    const a = lowest.attended;
+    const t = lowest.total;
+    const num = P * t - a;
+    const den = 1 - P;
+    needed = Math.ceil(Math.max(0, num / den));
   }
 
-  return { lowest, pct, need };
+  return { lowest, curPct, needed };
 }
 
-function bunkOrAttendMessage(subject, colors) {
-  const A = subject.attended;
-  const T = subject.total;
-  if (T === 0) return 'No classes marked yet — attend *something* first 😅';
+function getBunkText(sub, target = 75) {
+  const a = sub.attended;
+  const t = sub.total;
+  const P = target / 100;
 
-  const pct = Math.round((A / T) * 100);
-  const target = 75;
-  const ratio = target / 100;
+  if (t === 0) {
+    return 'First attend at least one class before planning bunks 😄';
+  }
 
-  // Max total such that attendance still >= 75
-  const maxTotal = Math.floor(A / ratio);
-  const bunkable = maxTotal - T;
+  const curPct = Math.round((a / t) * 100);
 
-  if (pct < target) {
-    // classes needed to reach 75
-    let need = 0;
-    let a = A;
-    let t = T;
-    while (t > 0 && Math.round((a / t) * 100) < target && need < 200) {
-      a += 1;
-      t += 1;
-      need += 1;
+  if (curPct >= target) {
+    const maxBunksFloat = a / P - t;
+    const maxBunks = Math.floor(maxBunksFloat);
+    if (maxBunks <= 0) {
+      return 'You are safe for now, but maybe don’t start bunking marathons yet 😅';
     }
-    return `Bro, shortage alert 🔥 Attend around ${need} ${need === 1 ? 'class' : 'classes'} in a row for ${subject.name}.`;
+    return `You can bunk around ${maxBunks} class(es) and still stay ≥ ${target}%. Use this power wisely.`;
+  } else {
+    const num = P * t - a;
+    const den = 1 - P;
+    const needed = Math.ceil(Math.max(0, num / den));
+    return `Attend the next ${needed} class(es) in a row to reach ${target}%. No more “proxy attendance” fantasies for now.`;
   }
+}
 
-  if (bunkable <= 0) {
-    return `Barely safe zone ⚠️ Please attend next few ${subject.name} classes, don’t test your luck.`;
-  }
+const styles = StyleSheet.create({
+  input: {
+    borderWidth: 1,
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: Platform.OS === 'ios' ? 10 : 8,
+    fontSize: 15,
+  },
+  button: {
+    borderRadius: 999,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+});
 
-  if (bunkable <= 2) {
-    return `You are safe-ish 😎 You *can* bunk about ${bunkable} ${bunkable === 1 ? 'class' : 'classes'}, but don’t go full villain.`;
-  }
-
-  return `Absolute chad attendance 💪 You can bunk ~${bunkable} ${bunkable === 1 ? 'class' : 'classes'} for ${subject.name} and still stay above 75%.`;
+function appBackgroundForInput(secondary, bg) {
+  return Platform.OS === 'ios' ? secondary : bg;
 }
 
 export default function AttendanceScreen() {
-  const { state, setPart } = useApp();
-  const { colors } = useThemeColors();
+  const { appState, setPart, colors } = useAppContext();
   const [newSub, setNewSub] = useState('');
-  const subjects = state.subjects;
 
+  const subjects = appState.subjects;
   const overall = calcOverall(subjects);
-  const insights = useMemo(() => getInsights(subjects), [subjects]);
-
-  const updateSubjects = (arr) => setPart('subjects', arr);
+  const insights = useMemo(
+    () => getAttendanceInsights(subjects),
+    [subjects]
+  );
 
   const addSubject = () => {
     if (!newSub.trim()) return;
-    updateSubjects([
-      ...subjects,
-      { id: Date.now().toString(), name: newSub.trim(), attended: 0, total: 0 },
+    setPart('subjects', (prev) => [
+      ...prev,
+      {
+        id: Date.now().toString(),
+        name: newSub.trim(),
+        attended: 0,
+        total: 0,
+      },
     ]);
     setNewSub('');
   };
 
   const mark = (id, present) => {
-    updateSubjects(
-      subjects.map((s) =>
+    setPart('subjects', (prev) =>
+      prev.map((s) =>
         s.id === id
           ? {
               ...s,
@@ -123,8 +137,9 @@ export default function AttendanceScreen() {
   return (
     <ScrollView
       style={{ flex: 1 }}
-      contentContainerStyle={{ padding: 16, paddingBottom: 90, gap: 16 }}
+      contentContainerStyle={{ padding: 16, paddingBottom: 96, gap: 18 }}
     >
+      {/* Overview */}
       <GlassCard colors={colors}>
         <SectionTitle
           colors={colors}
@@ -132,21 +147,18 @@ export default function AttendanceScreen() {
           icon={
             <MaterialCommunityIcons
               name="calendar-check"
-              size={24}
+              size={22}
               color={colors.neonCyan}
             />
           }
         />
-        <Text style={{ color: colors.textMuted, fontSize: 15, marginBottom: 10 }}>
-          Tap{' '}
-          <Text style={{ color: colors.success, fontWeight: '600' }}>
-            Present
-          </Text>{' '}
-          /{' '}
-          <Text style={{ color: colors.danger, fontWeight: '600' }}>
-            Absent
-          </Text>{' '}
-          after each class. Let the app handle shortage panic 😌.
+
+        <Text
+          style={{ color: colors.textMuted, fontSize: 14, marginBottom: 10 }}
+        >
+          Tap <Text style={{ color: colors.success }}>Present</Text> /
+          <Text style={{ color: colors.danger }}> Absent</Text> after each
+          class. The app will do all the boring maths.
         </Text>
 
         <View
@@ -175,7 +187,7 @@ export default function AttendanceScreen() {
               <Text
                 style={{
                   color: colors.textMuted,
-                  fontSize: 13,
+                  fontSize: 12,
                   marginBottom: 4,
                 }}
               >
@@ -184,29 +196,26 @@ export default function AttendanceScreen() {
               <Text
                 style={{
                   color: colors.neonPink,
-                  fontWeight: '700',
                   fontSize: 16,
+                  fontWeight: '700',
                 }}
               >
                 {insights.lowest.name}
               </Text>
-              <Text style={{ color: colors.textMuted, fontSize: 13 }}>
-                Needs ~
+              <Text style={{ color: colors.textMuted, fontSize: 12 }}>
+                Needs around{' '}
                 <Text
-                  style={{
-                    color: colors.neonCyan,
-                    fontWeight: '700',
-                  }}
+                  style={{ color: colors.neonCyan, fontWeight: '700' }}
                 >
-                  {insights.need}
+                  {insights.needed}
                 </Text>{' '}
-                back-to-back classes to reach 75%.
+                clean classes to reach 75%.
               </Text>
             </View>
           )}
         </View>
 
-        <View style={{ flexDirection: 'row', gap: 10, marginTop: 8 }}>
+        <View style={{ flexDirection: 'row', gap: 10, marginTop: 6 }}>
           <TextInput
             placeholder="Add subject (e.g. DAA)"
             placeholderTextColor={colors.textMuted}
@@ -218,7 +227,10 @@ export default function AttendanceScreen() {
                 flex: 1,
                 borderColor: colors.border,
                 color: colors.text,
-                backgroundColor: 'rgba(15,23,42,0.6)',
+                backgroundColor: appBackgroundForInput(
+                  colors.bgSecondary,
+                  colors.bg
+                ),
               },
             ]}
           />
@@ -238,15 +250,17 @@ export default function AttendanceScreen() {
         </View>
       </GlassCard>
 
+      {/* Subject-wise list */}
       <GlassCard colors={colors}>
         <SectionTitle
           colors={colors}
           label="Subjects"
           icon={<Ionicons name="book" size={22} color={colors.neonCyan} />}
         />
+
         {subjects.length === 0 ? (
           <Text style={{ color: colors.textMuted, fontSize: 14 }}>
-            No subjects yet. Add one above.
+            No subjects yet. Add one above and start tracking like a pro. 📚
           </Text>
         ) : (
           subjects.map((s) => {
@@ -254,6 +268,7 @@ export default function AttendanceScreen() {
               ? Math.round((s.attended / s.total) * 100)
               : 0;
             const isLow = s.total > 0 && pct < 75;
+            const bunkText = getBunkText(s);
 
             return (
               <View
@@ -264,22 +279,28 @@ export default function AttendanceScreen() {
                   borderWidth: 1,
                   borderColor: colors.border,
                   marginBottom: 12,
-                  backgroundColor: 'rgba(15,23,42,0.6)',
+                  backgroundColor: 'rgba(15,23,42,0.45)',
                 }}
               >
                 <View
-                  style={{ flexDirection: 'row', justifyContent: 'space-between' }}
+                  style={{
+                    flexDirection: 'row',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                  }}
                 >
                   <Text
                     style={{
                       color: colors.text,
-                      fontWeight: '700',
                       fontSize: 16,
+                      fontWeight: '700',
                     }}
                   >
                     {s.name}
                   </Text>
-                  <Text style={{ color: colors.textMuted, fontSize: 13 }}>
+                  <Text
+                    style={{ color: colors.textMuted, fontSize: 13 }}
+                  >
                     {s.attended}/{s.total} classes
                   </Text>
                 </View>
@@ -298,7 +319,9 @@ export default function AttendanceScreen() {
                       width: `${pct}%`,
                       height: '100%',
                       borderRadius: 999,
-                      backgroundColor: isLow ? colors.danger : colors.success,
+                      backgroundColor: isLow
+                        ? colors.danger
+                        : colors.success,
                     }}
                   />
                 </View>
@@ -307,7 +330,6 @@ export default function AttendanceScreen() {
                   style={{
                     flexDirection: 'row',
                     justifyContent: 'space-between',
-                    alignItems: 'center',
                     marginTop: 8,
                   }}
                 >
@@ -317,14 +339,28 @@ export default function AttendanceScreen() {
                       fontSize: 13,
                     }}
                   >
-                    {bunkOrAttendMessage(s, colors)}
+                    {s.total === 0
+                      ? 'No classes yet – fresh start 😎'
+                      : isLow
+                      ? '⚠ In danger zone'
+                      : '✅ Safe for now'}
                   </Text>
                   <Text
-                    style={{ color: colors.textMuted, fontSize: 13, marginLeft: 8 }}
+                    style={{ color: colors.textMuted, fontSize: 13 }}
                   >
                     {pct}%
                   </Text>
                 </View>
+
+                <Text
+                  style={{
+                    color: colors.textMuted,
+                    fontSize: 12,
+                    marginTop: 6,
+                  }}
+                >
+                  {bunkText}
+                </Text>
 
                 <View
                   style={{
@@ -381,20 +417,3 @@ export default function AttendanceScreen() {
     </ScrollView>
   );
 }
-
-const styles = StyleSheet.create({
-  input: {
-    borderWidth: 1,
-    borderRadius: 18,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    fontSize: 15,
-  },
-  button: {
-    borderRadius: 999,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});

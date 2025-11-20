@@ -1,5 +1,5 @@
 // app/tasks.js
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ScrollView,
   View,
@@ -8,11 +8,33 @@ import {
   TouchableOpacity,
   FlatList,
   StyleSheet,
+  Platform,
 } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import { Feather, Ionicons, MaterialIcons } from '@expo/vector-icons';
 import GlassCard from '../components/GlassCard';
 import SectionTitle from '../components/SectionTitle';
-import { useApp, useThemeColors } from '../context/AppContext';
+import { useAppContext } from '../context/AppContext';
+
+const styles = StyleSheet.create({
+  input: {
+    borderWidth: 1,
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: Platform.OS === 'ios' ? 10 : 8,
+    fontSize: 15,
+  },
+  button: {
+    borderRadius: 999,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+});
+
+function appBackgroundForInput(secondary, bg) {
+  return Platform.OS === 'ios' ? secondary : bg;
+}
 
 function FocusTimerCard({ colors }) {
   const [minutes, setMinutes] = useState(25);
@@ -40,7 +62,10 @@ function FocusTimerCard({ colors }) {
   const m = String(Math.floor(secondsLeft / 60)).padStart(2, '0');
   const s = String(secondsLeft % 60).padStart(2, '0');
   const total = Math.max(minutes * 60, 1);
-  const progress = Math.min(100, Math.max(0, ((total - secondsLeft) / total) * 100));
+  const progress = Math.min(
+    100,
+    Math.max(0, ((total - secondsLeft) / total) * 100)
+  );
 
   return (
     <GlassCard colors={colors}>
@@ -54,10 +79,10 @@ function FocusTimerCard({ colors }) {
           flexDirection: 'row',
           justifyContent: 'space-between',
           alignItems: 'center',
-          marginBottom: 10,
+          marginBottom: 8,
         }}
       >
-        <Text style={{ color: colors.textMuted, fontSize: 15 }}>
+        <Text style={{ color: colors.textMuted, fontSize: 14 }}>
           Session length (min)
         </Text>
         <TextInput
@@ -71,16 +96,19 @@ function FocusTimerCard({ colors }) {
               textAlign: 'right',
               borderColor: colors.border,
               color: colors.text,
-              backgroundColor: 'rgba(15,23,42,0.6)',
+              backgroundColor: appBackgroundForInput(
+                colors.bgSecondary,
+                colors.bg
+              ),
             },
           ]}
           placeholderTextColor={colors.textMuted}
         />
       </View>
-      <View style={{ alignItems: 'center', marginVertical: 8 }}>
+      <View style={{ alignItems: 'center', marginVertical: 10 }}>
         <Text
           style={{
-            fontSize: 36,
+            fontSize: 34,
             fontWeight: '800',
             color: colors.text,
           }}
@@ -94,7 +122,7 @@ function FocusTimerCard({ colors }) {
           borderRadius: 999,
           backgroundColor: 'rgba(148,163,184,0.3)',
           overflow: 'hidden',
-          marginBottom: 12,
+          marginBottom: 10,
         }}
       >
         <View
@@ -113,7 +141,9 @@ function FocusTimerCard({ colors }) {
             { flex: 1, backgroundColor: colors.accent },
           ]}
         >
-          <Text style={{ color: 'white', fontWeight: '700', fontSize: 14 }}>
+          <Text
+            style={{ color: 'white', fontWeight: '700', fontSize: 14 }}
+          >
             {running ? 'Pause' : 'Start'}
           </Text>
         </TouchableOpacity>
@@ -144,30 +174,28 @@ function FocusTimerCard({ colors }) {
 }
 
 export default function TasksScreen() {
-  const { state, setPart } = useApp();
-  const { colors } = useThemeColors();
+  const { appState, setPart, colors } = useAppContext();
   const [input, setInput] = useState('');
-  const tasks = state.tasks;
 
-  const setTasks = (arr) => setPart('tasks', arr);
+  const tasks = appState.tasks;
 
   const addTask = () => {
     if (!input.trim()) return;
-    setTasks([
+    setPart('tasks', (prev) => [
       {
         id: Date.now().toString(),
         title: input.trim(),
         due: 'Custom',
         done: false,
       },
-      ...tasks,
+      ...prev,
     ]);
     setInput('');
   };
 
   const toggleTask = (id) => {
-    setTasks(
-      tasks.map((t) =>
+    setPart('tasks', (prev) =>
+      prev.map((t) =>
         t.id === id ? { ...t, done: !t.done } : t
       )
     );
@@ -176,7 +204,7 @@ export default function TasksScreen() {
   return (
     <ScrollView
       style={{ flex: 1 }}
-      contentContainerStyle={{ padding: 16, paddingBottom: 90, gap: 16 }}
+      contentContainerStyle={{ padding: 16, paddingBottom: 96, gap: 18 }}
     >
       <GlassCard colors={colors}>
         <SectionTitle
@@ -184,7 +212,7 @@ export default function TasksScreen() {
           label="Tasks & Deadlines"
           icon={<Feather name="check-square" size={22} color={colors.neonCyan} />}
         />
-        <View style={{ flexDirection: 'row', gap: 10, marginBottom: 10 }}>
+        <View style={{ flexDirection: 'row', gap: 10, marginBottom: 12 }}>
           <TextInput
             placeholder="Add task (e.g. DBMS mini project)"
             placeholderTextColor={colors.textMuted}
@@ -196,7 +224,10 @@ export default function TasksScreen() {
                 flex: 1,
                 borderColor: colors.border,
                 color: colors.text,
-                backgroundColor: 'rgba(15,23,42,0.6)',
+                backgroundColor: appBackgroundForInput(
+                  colors.bgSecondary,
+                  colors.bg
+                ),
               },
             ]}
           />
@@ -207,14 +238,18 @@ export default function TasksScreen() {
               { backgroundColor: colors.accent, paddingHorizontal: 18 },
             ]}
           >
-            <Text style={{ color: 'white', fontWeight: '700', fontSize: 14 }}>
+            <Text
+              style={{ color: 'white', fontWeight: '700', fontSize: 14 }}
+            >
               Add
             </Text>
           </TouchableOpacity>
         </View>
+
         {tasks.length === 0 ? (
           <Text style={{ color: colors.textMuted, fontSize: 14 }}>
-            No tasks yet. Add your first one above.
+            No tasks yet. Add your first one above and stop storing everything
+            in your brain 🧠.
           </Text>
         ) : (
           <FlatList
@@ -227,29 +262,27 @@ export default function TasksScreen() {
                   padding: 14,
                   borderRadius: 20,
                   borderWidth: 1,
-                  marginBottom: 10,
+                  marginBottom: 8,
                   borderColor: item.done ? colors.success : colors.border,
                   backgroundColor: item.done
-                    ? 'rgba(34,197,94,0.12)'
-                    : 'rgba(15,23,42,0.6)',
+                    ? 'rgba(34,197,94,0.15)'
+                    : 'rgba(15,23,42,0.45)',
                 }}
               >
                 <Text
                   style={{
                     color: colors.text,
                     fontSize: 15,
-                    textDecorationLine: item.done ? 'line-through' : 'none',
+                    textDecorationLine: item.done
+                      ? 'line-through'
+                      : 'none',
                     opacity: item.done ? 0.7 : 1,
                   }}
                 >
                   {item.title}
                 </Text>
                 <Text
-                  style={{
-                    color: colors.textMuted,
-                    fontSize: 12,
-                    marginTop: 4,
-                  }}
+                  style={{ color: colors.textMuted, fontSize: 12 }}
                 >
                   Due: {item.due} • {item.done ? '✅ Completed' : 'Pending'}
                 </Text>
@@ -263,20 +296,3 @@ export default function TasksScreen() {
     </ScrollView>
   );
 }
-
-const styles = StyleSheet.create({
-  input: {
-    borderWidth: 1,
-    borderRadius: 18,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    fontSize: 15,
-  },
-  button: {
-    borderRadius: 999,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});
